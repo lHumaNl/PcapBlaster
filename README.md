@@ -84,11 +84,24 @@ The CLI arguments for `main.py` are as follows:
 
 The `config.yaml` file contains the main configuration settings for PcapBlaster. Key sections are:
 
-| Field          | Description                                                                           |
-|----------------|---------------------------------------------------------------------------------------|
-| run_config     | General run configuration, such as netmap mode, speed check interval, and thresholds. |
-| pcap_files     | List of PCAP files to be used in the test, including load percentages and interfaces. |
-| tcpreplay_args | Additional arguments for tcpreplay.                                                   |
+| Parameter                   | Default  | Type       | Description                                                                                                                                                     |
+|-----------------------------|----------|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **run_config**              |          | Dictionary | General configuration for running the test.                                                                                                                     |
+| - netmap_mode               | False    | Boolean    | Enables or disables netmap mode for high-performance packet replay.                                                                                             |
+| - speed_check               | False    | Boolean    | Enables speed check during test execution to ensure target speed consistency.                                                                                   |
+| - speed_check_interval      | 3        | Integer    | Interval in seconds between speed checks.                                                                                                                       |
+| - speed_threshold           | 1.2      | Float      | Threshold multiplier for speed variance. If the speed deviates from the target by this factor, a warning is logged, and tcpreplay may restart.                  |
+| - is_sudo                   | False    | Boolean    | Determines if sudo privileges are required for `tcpreplay` execution.                                                                                           |
+| **pcap_files**              |          | List       | List of PCAP files to be replayed, each with specific settings.                                                                                                 |
+| - file                      | Required | String     | Path to the PCAP file.                                                                                                                                          |
+| - percentage                | 100.0    | Float      | Percentage load assigned to this PCAP file within the test. Percentages across all PCAP files must sum to 100%.                                                 |
+| - interface                 | Required | String     | Network interface to use for replaying the PCAP file (e.g., `eth0`).                                                                                            |
+| - loop_count                | None     | Integer    | Number of times to loop over this PCAP file. If None, the loop count is calculated based on speed and session parameters.                                       |
+| - is_percent_loop_calculate | False    | Boolean    | Whether the loop count should be calculated as a percentage of the load, based on other parameters.                                                             |
+| - preload_in_ram            | True     | Boolean    | If True, preloads the PCAP file into RAM for faster access.                                                                                                     |
+| - netmap_privilege          | False    | Boolean    | Enables or disables netmap privileges.                                                                                                                          |
+| **tcpreplay_args**          |          | Dictionary | Additional arguments passed to `tcpreplay`.                                                                                                                     |
+| - (various arguments)       | None     | Mixed      | Any additional arguments for `tcpreplay`, formatted as key-value pairs. Supported arguments may include speed, duration, and more based on tcpreplay’s options. |
 
 Example `config.yaml`:
 
@@ -112,42 +125,109 @@ tcpreplay_args:
   some_arg: 0
 ```
 
-#### load.yaml
+### load.yaml
 
-The `load.yaml` file specifies the load configuration parameters for the test type chosen (`max_perf`, `stability`,
-`spike`, or `custom`). Each test type has unique fields.
+The parameters for `load.yaml` vary based on the selected test type (`max_perf`, `stability`, `spike`, `custom`).
 
-Example `load.yaml` for `max_perf` test:
+#### max_perf
+
+| Parameter              | Default | Type    | Description                                                                                     |
+|------------------------|---------|---------|-------------------------------------------------------------------------------------------------|
+| steps                  | 1       | Integer | Number of test steps to execute in a sequence.                                                  |
+| impact                 | 0       | Integer | Impact adjustment time (in seconds) added to each step duration.                                |
+| base_speed_pps         | None    | Float   | Base packets-per-second speed for this test (set either `base_speed_pps` or `base_speed_mbps`). |
+| base_speed_mbps        | None    | Float   | Base megabits-per-second speed for this test.                                                   |
+| start_speed_percent    | 0       | Float   | Starting load percentage as a fraction of the base speed.                                       |
+| increment_percent      | 0       | Float   | Percentage increment to apply to the load after each step.                                      |
+| total_sessions_per_min | None    | Integer | Total number of sessions expected per minute at full load.                                      |
+
+Example `load.yaml` for `max_perf`:
 
 ```yaml
 max_perf:
-  steps: 3
-  step_duration: 30
+  steps: 5
   impact: 10
-  base_speed_mbps: 1
-  start_speed_percent: 100
-  increment_percent: 20
-  total_sessions_per_min: 1000
+  base_speed_mbps: 100
+  start_speed_percent: 10
+  increment_percent: 10
+  total_sessions_per_min: 5000
+```
 
+#### stability
+
+| Parameter              | Default  | Type    | Description                                                                                     |
+|------------------------|----------|---------|-------------------------------------------------------------------------------------------------|
+| steps                  | 1        | Integer | Number of test steps for stability check.                                                       |
+| impact                 | 0        | Integer | Impact adjustment time (in seconds) added to each step duration.                                |
+| base_speed_pps         | None     | Float   | Base packets-per-second speed for this test (set either `base_speed_pps` or `base_speed_mbps`). |
+| base_speed_mbps        | None     | Float   | Base megabits-per-second speed for this test.                                                   |
+| step_duration          | Required | Integer | Duration (in seconds) for each stability test step.                                             |
+| step_percent           | 100.0    | Float   | Load percentage for each stability step.                                                        |
+| total_sessions_per_min | None     | Integer | Total number of sessions expected per minute at full load.                                      |
+
+Example `load.yaml` for `stability`:
+
+```yaml
 stability:
-  step_duration: 3600
+  steps: 3
   impact: 10
-  base_speed_pps: 10000
-  step_percent: 80
-  total_sessions_per_min: 10000
+  base_speed_mbps: 100
+  step_duration: 60
+  step_percent: 100
+  total_sessions_per_min: 5000
+```
 
+#### spike
+
+| Parameter                | Default  | Type    | Description                                                                                     |
+|--------------------------|----------|---------|-------------------------------------------------------------------------------------------------|
+| steps                    | 1        | Integer | Number of test steps for spike test.                                                            |
+| impact                   | 0        | Integer | Impact adjustment time (in seconds) added to each step duration.                                |
+| base_speed_pps           | None     | Float   | Base packets-per-second speed for this test (set either `base_speed_pps` or `base_speed_mbps`). |
+| base_speed_mbps          | None     | Float   | Base megabits-per-second speed for this test.                                                   |
+| spike_duration           | Required | Integer | Duration (in seconds) for each spike.                                                           |
+| stability_speed_duration | Required | Integer | Duration (in seconds) for stability period after each spike.                                    |
+| stability_speed_percent  | 100.0    | Float   | Load percentage for the stability period after each spike.                                      |
+| spike_base_percent       | Required | Float   | Starting percentage for the spike.                                                              |
+| increment_percent        | 0        | Float   | Percentage increment for each spike.                                                            |
+| total_sessions_per_min   | None     | Integer | Total number of sessions expected per minute at full load.                                      |
+| pcap_for_spike           | None     | List    | Specific PCAP files to use for spikes (by file path).                                           |
+
+Example `load.yaml` for `spike`:
+
+```yaml
 spike:
   steps: 3
-  spike_duration: 60
-  stability_speed_duration: 300
-  impact: 10
-  base_speed_pps: 10000
-  stability_speed_percent: 70
-  spike_base_percent: 90
-  increment_percent: 5
+  impact: 5
+  base_speed_mbps: 50
+  spike_duration: 10
+  stability_speed_duration: 60
+  stability_speed_percent: 80
+  spike_base_percent: 150
+  increment_percent: 10
   total_sessions_per_min: 10000
   pcap_for_spike:
     - path/to/pcap1.pcap
+```
+
+#### custom
+
+| Parameter              | Default | Type    | Description                                                                       |
+|------------------------|---------|---------|-----------------------------------------------------------------------------------|
+| steps                  | 1       | Integer | Number of steps for custom test.                                                  |
+| impact                 | 0       | Integer | Impact adjustment time (in seconds) added to each step duration.                  |
+| base_speed_pps         | None    | Float   | Base packets-per-second speed (set either `base_speed_pps` or `base_speed_mbps`). |
+| base_speed_mbps        | None    | Float   | Base megabits-per-second speed.                                                   |
+| total_sessions_per_min | None    | Integer | Total number of sessions per minute at 100% load.                                 |
+
+Example `load.yaml` for `custom`:
+
+```yaml
+custom:
+  steps: 2
+  impact: 10
+  base_speed_pps: 100000
+  total_sessions_per_min: 8000
 ```
 
 ### Examples
