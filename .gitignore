@@ -1,0 +1,11 @@
+.idea
+.venv
+*.yaml
+*.log
+*.xlsx
+*.png
+*.html
+load_tests
+config
+pcaps
+log
