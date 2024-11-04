@@ -32,7 +32,7 @@ and visualized through generated graphs.
 
 1. Clone the repository:
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/lHumaNl/PcapBlaster.git
     ```
 
 2. Navigate to the project directory:
