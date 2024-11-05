@@ -20,7 +20,6 @@ class Logger:
             level=logging.INFO,
             format=Logger.__FORMAT_STR,
             datefmt=Logger.__DATEFORMAT,
-            encoding=Logger.__ENCODING
         )
 
         logger = logging.getLogger()

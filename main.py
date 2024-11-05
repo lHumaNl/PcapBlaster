@@ -30,7 +30,7 @@ def main():
         Visualizer.visualize(report_generator.df_stage_combined, report_generator.df_stability_combined,
                              config.load_config.test_folder)
     except Exception as e:
-        logging.error(f"An error occurred: {e.with_traceback()}")
+        logging.error(f"An error occurred: {e.with_traceback(None)}")
         sys.exit(1)
 
 

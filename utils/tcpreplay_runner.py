@@ -3,10 +3,10 @@ import subprocess
 import threading
 import time
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from models.config import Config, MaxPerfLoadConfig, StabilityLoadConfig, SpikeLoadConfig, CustomLoadConfig, \
-    PcapConfig, RunConfig, TcpReplayArgsConfig
+    PcapConfig, RunConfig, TcpReplayArgsConfig, BashScriptConfig
 
 
 class TcpreplayRunner:
@@ -51,6 +51,9 @@ class TcpreplayRunner:
         for step_number in range(1, load_params.steps + 1):
             logging.info(f"Starting step {step_number}")
 
+            if self.config.bash_scripts_config.bash_scripts_list:
+                self.run_additional_scripts(True)
+
             current_load_percent = load_params.start_speed_percent + load_params.increment_percent * (step_number - 1)
 
             step_thread = StepThread(
@@ -63,14 +66,39 @@ class TcpreplayRunner:
                 is_pps=load_params.is_pps,
                 step_duration=load_params.step_duration,
                 impact=load_params.impact,
-                total_sessions_per_min=load_params.total_sessions_per_min,
                 test_folder=self.config.load_config.test_folder
             )
 
             step_thread.start()
             step_thread.join()
 
+            if self.config.bash_scripts_config.bash_scripts_list:
+                self.run_additional_scripts(False)
+
             logging.info(f"Ending step {step_number}")
+
+    @staticmethod
+    def run_script(bash_script: BashScriptConfig):
+        if bash_script.only_once and bash_script.run_count > 0:
+            return
+
+        logging.info(f'Run script: {bash_script.script}')
+        bash_script.run_count += 1
+        with subprocess.Popen(bash_script.script, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,
+                              text=True) as process:
+            lines = ''
+            for line in process.stdout:
+                lines += line
+
+        logging.info(f'Script output:\n{lines}')
+
+    def run_additional_scripts(self, is_before: bool):
+        for bash_script in self.config.bash_scripts_config.bash_scripts_list:
+            if bash_script.is_before_stage and is_before:
+                self.run_script(bash_script)
+            elif not bash_script.is_before_stage and not is_before:
+                self.run_script(bash_script)
 
     def run_stability_test(self):
         """
@@ -79,6 +107,8 @@ class TcpreplayRunner:
         load_params: StabilityLoadConfig = self.config.load_config
 
         logging.info("Starting stability test")
+        if self.config.bash_scripts_config.bash_scripts_list:
+            self.run_additional_scripts(True)
 
         step_thread = StepThread(
             step_number=1,
@@ -90,12 +120,14 @@ class TcpreplayRunner:
             is_pps=load_params.is_pps,
             step_duration=load_params.step_duration,
             impact=load_params.impact,
-            total_sessions_per_min=load_params.total_sessions_per_min,
             test_folder=self.config.load_config.test_folder
         )
 
         step_thread.start()
         step_thread.join()
+
+        if self.config.bash_scripts_config.bash_scripts_list:
+            self.run_additional_scripts(False)
 
         logging.info("Ending stability test")
 
@@ -119,7 +151,6 @@ class TcpreplayRunner:
                 is_pps=load_params.is_pps,
                 step_duration=load_params.stability_speed_duration,
                 impact=load_params.impact,
-                total_sessions_per_min=load_params.total_sessions_per_min,
                 test_folder=self.config.load_config.test_folder
             )
 
@@ -145,7 +176,6 @@ class TcpreplayRunner:
                 is_pps=load_params.is_pps,
                 step_duration=load_params.spike_duration,
                 impact=load_params.impact,
-                total_sessions_per_min=load_params.total_sessions_per_min,
                 test_folder=self.config.load_config.test_folder
             )
 
@@ -160,10 +190,10 @@ class StepThread(threading.Thread):
     Thread class for running a single test step.
     """
 
-    def __init__(self, step_number: int, pcap_configs: list[PcapConfig], run_config: RunConfig,
+    def __init__(self, step_number: int, pcap_configs: List[PcapConfig], run_config: RunConfig,
                  tcpreplay_args: TcpReplayArgsConfig, current_load_percent: float, base_speed: float, is_pps: bool,
-                 step_duration: int, impact: int, total_sessions_per_min: int, test_folder: str,
-                 spike_load_percent: Optional[float] = None, pcap_for_spike: Optional[list[PcapConfig]] = None):
+                 step_duration: int, impact: int, test_folder: str,
+                 spike_load_percent: Optional[float] = None, pcap_for_spike: Optional[List[PcapConfig]] = None):
         super().__init__()
         self.step_number = step_number
         self.pcap_configs = pcap_configs
@@ -174,7 +204,6 @@ class StepThread(threading.Thread):
         self.is_pps = is_pps
         self.step_duration = step_duration
         self.impact = impact
-        self.total_sessions_per_min = total_sessions_per_min
         self.test_folder = test_folder
 
         self.spike_load_percent = spike_load_percent
@@ -202,7 +231,6 @@ class StepThread(threading.Thread):
                 is_pps=self.is_pps,
                 step_duration=self.step_duration,
                 impact=self.impact,
-                total_sessions_per_min=self.total_sessions_per_min,
                 test_folder=self.test_folder
             )
 
@@ -220,7 +248,7 @@ class TcpreplayThread(threading.Thread):
 
     def __init__(self, step_number: int, pcap_config: PcapConfig, run_config: RunConfig,
                  tcpreplay_args: TcpReplayArgsConfig, load_percent: float, base_speed: float, is_pps: bool,
-                 step_duration: int, impact: int, total_sessions_per_min: int, test_folder: str):
+                 step_duration: int, impact: int, test_folder: str):
         super().__init__()
         self.step_number = step_number
         self.pcap_config = pcap_config
@@ -231,7 +259,6 @@ class TcpreplayThread(threading.Thread):
         self.is_pps = is_pps
         self.step_duration = step_duration
         self.impact = impact
-        self.total_sessions_per_min = total_sessions_per_min
         self.loop_count = pcap_config.loop_count
         self.is_percent_loop_calculate = pcap_config.is_percent_loop_calculate
         self.test_folder = test_folder
@@ -335,11 +362,10 @@ class TcpreplayProcessRunner:
         if self.preload_in_ram:
             cmd.append('--preload-pcap')
 
-        if self.unique_ip_loops:
+        if self.unique_ip_loops == 0:
             cmd.append('--unique-ip')
-
-            if self.unique_ip_loops > 0:
-                cmd.append(f'--unique-ip-loops={self.unique_ip_loops}')
+        elif self.unique_ip_loops > 0:
+            cmd.extend(['--unique-ip', f'--unique-ip-loops={self.unique_ip_loops}'])
 
         if self.is_pps:
             cmd.append(f'--pps={self.speed}')
@@ -373,8 +399,8 @@ class TcpreplayProcessRunner:
 
         with open(self.stats_file, 'a') as stat_file:
             while True:
-                with (subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       text=True) as process):
+                with subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                      text=True) as process:
                     if self.is_sudo:
                         process.stdin.write(self.sudo_password + '\n')
                         process.stdin.flush()
