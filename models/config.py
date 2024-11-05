@@ -96,6 +96,7 @@ class RunConfig:
         self.speed_threshold: float = float(general_config.get('speed_threshold', 1.2))
         self.is_sudo: bool = general_config.get('is_sudo', False)
         self.sudo_password: Optional[str] = sudo_password
+        self.is_unique_ip: bool = general_config.get('is_unique_ip', True)
 
         if self.speed_check_interval < 1:
             self.speed_check = False
@@ -305,8 +306,9 @@ class Config:
 
                 pcap_config.loop_count = pcap_config.pcap_statistic.loop_count
             elif pcap_config.loop_count is None and self.load_config.total_sessions_per_min is None:
-                pcap_config.loop_count = 0
-                pcap_config.is_percent_loop_calculate = False
+                if self.run_config.is_unique_ip:
+                    pcap_config.loop_count = 0
+                    pcap_config.is_percent_loop_calculate = False
 
     @staticmethod
     def __convert_to_dict(obj):

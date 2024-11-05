@@ -273,14 +273,17 @@ class TcpreplayThread(threading.Thread):
         current_speed = self.base_speed * (self.load_percent / 100)
         speed = current_speed * (percentage / 100)
 
-        if self.is_percent_loop_calculate:
-            if self.loop_count == 0:
-                loops = self.loop_count
+        if self.loop_count is not None:
+            if self.is_percent_loop_calculate:
+                if self.loop_count == 0:
+                    loops = self.loop_count
+                else:
+                    calculated_loops = int(self.loop_count * (self.load_percent / 100))
+                    loops = max(0, calculated_loops)
             else:
-                calculated_loops = int(self.loop_count * (self.load_percent / 100))
-                loops = max(0, calculated_loops)
+                loops = self.loop_count
         else:
-            loops = self.loop_count
+            loops = None
 
         stats_file = os.path.join(self.test_folder,
                                   f"stats__step_{self.step_number}__"
@@ -319,7 +322,7 @@ class TcpreplayProcessRunner:
     Class for managing the tcpreplay process.
     """
 
-    def __init__(self, pcap_file: str, interface: str, speed: float, is_pps: bool, unique_ip_loops: int,
+    def __init__(self, pcap_file: str, interface: str, speed: float, is_pps: bool, unique_ip_loops: Optional[int],
                  tcpreplay_args: TcpReplayArgsConfig, stats_file: str, stats_err_file: str, netmap_mode: bool,
                  duration: int, speed_check: bool, speed_check_interval: int, speed_threshold: float,
                  preload_in_ram: bool, is_sudo: bool, sudo_password: Optional[str]):
@@ -362,10 +365,11 @@ class TcpreplayProcessRunner:
         if self.preload_in_ram:
             cmd.append('--preload-pcap')
 
-        if self.unique_ip_loops == 0:
-            cmd.append('--unique-ip')
-        elif self.unique_ip_loops > 0:
-            cmd.extend(['--unique-ip', f'--unique-ip-loops={self.unique_ip_loops}'])
+        if self.unique_ip_loops is not None:
+            if self.unique_ip_loops == 0:
+                cmd.append('--unique-ip')
+            elif self.unique_ip_loops > 0:
+                cmd.extend(['--unique-ip', f'--unique-ip-loops={self.unique_ip_loops}'])
 
         if self.is_pps:
             cmd.append(f'--pps={self.speed}')

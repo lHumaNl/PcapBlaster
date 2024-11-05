@@ -20,7 +20,7 @@ and visualized through generated graphs.
 - `tcpreplay` installed and accessible in your PATH
 - The following Python libraries (see `requirements.txt` for exact versions):
     - `pyyaml`
-    - `scapy`
+    - `dpkt`
     - `pandas`
     - `matplotlib`
     - `plotly`
